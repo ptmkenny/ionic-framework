@@ -21,6 +21,7 @@ export class OutletPageManager extends React.Component<OutletPageManagerProps> {
   declare context: React.ContextType<typeof StackContext>;
   ionRouterOutlet: HTMLIonRouterOutletElement | undefined;
   outletIsReady: boolean;
+  private mountGeneration = 0;
 
   constructor(props: OutletPageManagerProps) {
     super(props);
@@ -40,13 +41,17 @@ export class OutletPageManager extends React.Component<OutletPageManagerProps> {
   }
 
   componentDidMount() {
+    const mountGeneration = ++this.mountGeneration;
     if (this.ionRouterOutlet) {
+      const el = this.ionRouterOutlet;
       /**
        * This avoids multiple raf calls
        * when React unmounts + remounts components.
        */
       if (!this.outletIsReady) {
-        componentOnReady(this.ionRouterOutlet, () => {
+        componentOnReady(el, () => {
+          // Hydration can finish after unmount, ref replacement, or a Strict Mode remount.
+          if (mountGeneration !== this.mountGeneration || this.ionRouterOutlet !== el) return;
           /**
            * Guard against duplicate callbacks from React strict mode double-mount.
            * Both componentDidMount calls pass the outer !outletIsReady check before
@@ -65,7 +70,6 @@ export class OutletPageManager extends React.Component<OutletPageManagerProps> {
            * outlet's forward animation removes ion-page-invisible, preventing
            * a flash where the outlet is briefly visible at full opacity.
            */
-          const el = this.ionRouterOutlet!;
           if (!el.classList.contains('ion-page-invisible') && !el.classList.contains('ion-page-hidden')) {
             el.classList.add('ion-page');
             el.classList.add('ion-page-invisible');
@@ -83,6 +87,7 @@ export class OutletPageManager extends React.Component<OutletPageManagerProps> {
   }
 
   componentWillUnmount() {
+    ++this.mountGeneration;
     if (this.ionRouterOutlet) {
       this.ionRouterOutlet.removeEventListener('ionViewWillEnter', this.ionViewWillEnterHandler);
       this.ionRouterOutlet.removeEventListener('ionViewDidEnter', this.ionViewDidEnterHandler);
