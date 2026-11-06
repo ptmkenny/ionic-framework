@@ -140,6 +140,12 @@ export class StackManager extends React.PureComponent<StackManagerProps> {
   skipTransition: boolean;
   /** The view item the in-flight swipe gesture revealed, so the same one gets cleared. */
   private swipeRevealedViewItem?: ViewItem;
+  /**
+   * The view that was visible when this outlet went out of scope and kept its views for
+   * swipe-to-go-back (see handleOutOfScopeOutlet). It stays visible until this outlet
+   * comes back in scope.
+   */
+  private swipePreservedViewItem?: ViewItem;
 
   stackContextValue: StackContextState = {
     registerIonPage: this.registerIonPage.bind(this),
@@ -372,6 +378,9 @@ export class StackManager extends React.PureComponent<StackManagerProps> {
       const parentOutlet =
         this.routerOutletElement?.parentElement?.closest<HTMLIonRouterOutletElement>('ion-router-outlet');
       if (parentOutlet?.swipeGesture === true) {
+        this.swipePreservedViewItem = this.context
+          .getViewItemsForOutlet(this.id)
+          .find((viewItem) => viewItem.ionPageElement && isViewVisible(viewItem.ionPageElement));
         this.dismissPresentedOverlays();
         return true;
       }
@@ -408,6 +417,22 @@ export class StackManager extends React.PureComponent<StackManagerProps> {
     }, VIEW_UNMOUNT_DELAY_MS);
 
     return true;
+  }
+
+  /**
+   * Hides the view kept visible for swipe-to-go-back when this outlet comes back in scope
+   * at a different view.
+   *
+   * The leaving view lookup cannot find it: routeInfo.lastPathname belongs to the outlet
+   * the user navigated from, so it matches no view here. Without this, the kept page stays
+   * visible next to the entering page.
+   */
+  private hideSwipePreservedView(enteringViewItem: ViewItem): void {
+    const preservedViewItem = this.swipePreservedViewItem;
+    this.swipePreservedViewItem = undefined;
+    if (preservedViewItem && preservedViewItem !== enteringViewItem) {
+      hideIonPageElement(preservedViewItem.ionPageElement);
+    }
   }
 
   /**
@@ -1233,6 +1258,7 @@ export class StackManager extends React.PureComponent<StackManagerProps> {
         this.ionPageWaitTimeout = undefined;
       }
 
+      this.hideSwipePreservedView(enteringViewItem);
       this.handleReadyEnteringView(routeInfo, enteringViewItem, leavingViewItem, shouldUnmountLeavingViewItem);
     } else if (enteringViewItem && !ionPageIsInDocument) {
       // Wait for ion-page to mount
